@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Infinite Craft</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #121212; color: white; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #workspace { flex: 1; padding: 20px; text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #sidebar { height: 160px; background: #242424; border-top: 2px solid #333; padding: 15px; overflow-x: auto; display: flex; gap: 10px; align-items: center; white-space: nowrap; }
+        .item { padding: 15px 25px; background: #333; border: 2px solid #555; border-radius: 12px; cursor: pointer; user-select: none; font-size: 18px; font-weight: bold; transition: 0.2s; display: inline-block; }
+        .selected { border-color: #00ffcc; background: #2a3a3a; transform: scale(1.1); }
+        #msg { margin-top: 20px; font-size: 1.3em; color: #ccc; height: 30px; }
+        #custom-craft { display: none; margin-top: 20px; background: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px dashed #00ffcc; width: 90%; max-width: 400px; }
+        input { padding: 12px; font-size: 16px; border-radius: 5px; border: none; margin-bottom: 10px; width: 90%; text-align: center; }
+        button { padding: 12px 20px; font-size: 16px; border-radius: 5px; border: none; background: #00ffcc; color: #000; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px;}
+        .danger-btn { background: #ff4444; color: white; margin-top: 20px; width: auto; font-size: 12px; padding: 8px 15px; }
+    </style>
+</head>
+<body>
+
+    <div id="workspace">
+        <h1 style="margin:0; color: #00ffcc;">Infinite Craft</h1>
+        <p style="color: #888;">Tap one item below, then tap another to combine!</p>
+        
+        <div id="msg"></div>
+        
+        <div id="custom-craft">
+            <p style="color: #00ffcc; margin-top: 0;">Brand new combination! You are the first.</p>
+            <input type="text" id="new-item-name" placeholder="What does it make? (1-3 words)">
+            <br>
+            <button onclick="submitNewCraft()">Craft it!</button>
+        </div>
+
+        <button class="danger-btn" onclick="resetGame()">Reset My Game</button>
+    </div>
+    
+    <div id="sidebar" id="inventory"></div>
+
+    <script>
+        // --- 1. GAME DATA ---
+        // Default built-in recipes so the game is fun immediately
+        const defaultRecipes = {
+            "soil+water": "Mud", "air+fire": "Smoke", "fire+water": "Steam",
+            "earth+fire": "Lava", "air+water": "Rain", "rain+soil": "Plant",
+            "mud+fire": "Brick", "brick+brick": "Wall", "wall+wall": "House"
+        };
+
+        // Load player data from their device, or start fresh
+        let inventory = JSON.parse(localStorage.getItem('ic_inventory')) || ["Soil", "Water", "Fire", "Air"];
+        let customRecipes = JSON.parse(localStorage.getItem('ic_custom_recipes')) || {};
+        
+        let firstSelected = null;
+        let pendingCombination = null;
+
+        // --- 2. GAME LOGIC ---
+        function saveData() {
+            localStorage.setItem('ic_inventory', JSON.stringify(inventory));
+            localStorage.setItem('ic_custom_recipes', JSON.stringify(customRecipes));
+        }
+
+        function renderInventory() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.innerHTML = '';
+            inventory.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'item';
+                div.innerText = item;
+                div.onclick = () => selectItem(div);
+                sidebar.appendChild(div);
+            });
+        }
+
+        function selectItem(element) {
+            if (!firstSelected) {
+                firstSelected = element;
+                element.classList.add('selected');
+                document.getElementById('msg').innerText = "";
+            } else {
+                if (firstSelected === element) {
+                    element.classList.remove('selected');
+                    firstSelected = null;
+                    return;
+                }
+                
+                const item1 = firstSelected.innerText.toLowerCase();
+                const item2 = element.innerText.toLowerCase();
+                firstSelected.classList.remove('selected');
+                firstSelected = null;
+                
+                document.getElementById('custom-craft').style.display = "none";
+                
+                // Alphabetize so "Fire+Water" and "Water+Fire" are identical
+                const recipeKey = [item1, item2].sort().join('+');
+                
+                // Check Default Recipes first, then Player's Custom Recipes
+                let result = defaultRecipes[recipeKey] || customRecipes[recipeKey];
+                
+                if (result) {
+                    document.getElementById('msg').innerText = `${capitalize(item1)} + ${capitalize(item2)} = ${result}`;
+                    if (!inventory.includes(result)) {
+                        inventory.push(result);
+                        saveData();
+                        renderInventory();
+                    }
+                } else {
+                    document.getElementById('msg').innerText = `${capitalize(item1)} + ${capitalize(item2)} = ???`;
+                    pendingCombination = recipeKey;
+                    document.getElementById('custom-craft').style.display = "block";
+                    document.getElementById('new-item-name').focus();
+                }
+            }
+        }
+
+        function submitNewCraft() {
+            let newName = document.getElementById('new-item-name').value.trim();
+            if (!newName || !pendingCombination) return;
+
+            // Format nicely
+            newName = capitalize(newName);
+            
+            // Save to personal custom dictionary
+            customRecipes[pendingCombination] = newName;
+            
+            // Add to inventory
+            if (!inventory.includes(newName)) {
+                inventory.push(newName);
+            }
+            
+            saveData();
+            renderInventory();
+            
+            document.getElementById('custom-craft').style.display = "none";
+            document.getElementById('new-item-name').value = '';
+            document.getElementById('msg').innerText = `You discovered: ${newName}!`;
+            pendingCombination = null;
+        }
+
+        function capitalize(str) {
+            return str.replace(/\b\w/g, char => char.toUpperCase());
+        }
+
+        function resetGame() {
+            if(confirm("Are you sure you want to delete all your discoveries and start over?")) {
+                localStorage.removeItem('ic_inventory');
+                localStorage.removeItem('ic_custom_recipes');
+                location.reload();
+            }
+        }
+
+        // Boot game
+        renderInventory();
+    </script>
+</body>
+</html>
